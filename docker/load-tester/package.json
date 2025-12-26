@@ -1,0 +1,10 @@
+{
+  "name": "load-tester",
+  "version": "1.0.0",
+  "description": "Load tester for magician props store",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {}
+}

@@ -1,0 +1,30 @@
+{
+  "name": "magician-props-store",
+  "version": "1.0.0",
+  "description": "Magician Props Store Frontend",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "axios": "^1.5.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "build": "npx webpack --mode production && cp -r public/* build/ 2>/dev/null || true && cp src/index.html build/",
+    "dev": "node server.js"
+  },
+  "devDependencies": {
+    "express": "^4.18.0",
+    "@babel/core": "^7.23.0",
+    "@babel/preset-react": "^7.22.0",
+    "@babel/preset-env": "^7.23.0",
+    "babel-loader": "^9.1.0",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.0",
+    "css-loader": "^6.8.0",
+    "style-loader": "^3.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
