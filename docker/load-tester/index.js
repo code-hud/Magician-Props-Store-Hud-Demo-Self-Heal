@@ -72,7 +72,7 @@ async function getCartSuggestions() {
 
 async function checkout(cartItems) {
   try {
-    const totalAmount = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0) || undefined;
+    const totalAmount = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
     const response = await fetch(`${BASE_URL}/orders?sessionId=${sessionId}`, {
       method: 'POST',
