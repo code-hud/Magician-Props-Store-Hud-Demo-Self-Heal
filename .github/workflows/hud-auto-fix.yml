@@ -113,10 +113,8 @@ jobs:
           echo "error_count=$ERROR_COUNT" >> $GITHUB_OUTPUT
           echo "time_range=$TIME_RANGE" >> $GITHUB_OUTPUT
 
-          # Create branch name: hud/<slugified-title-up-to-5-words>/<run_number>
-          SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9 ]//g' | awk '{for(i=1;i<=5&&i<=NF;i++) printf "%s-",$i}' | sed 's/-$//')
-          BRANCH_NAME="hud/${SLUG}/${{ github.run_number }}"
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          # Branch name is finalized after Claude runs (uses Claude's slug)
+          echo "run_number=${{ github.run_number }}" >> $GITHUB_OUTPUT
 
           # Write full context to file for Claude
           cat > /tmp/issue_context.txt << 'ISSUE_EOF'
@@ -168,11 +166,10 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Create fix branch
+      - name: Configure git identity
         run: |
           git config user.name "hud-issuehelper[bot]"
           git config user.email "216726706+hud-issuehelper[bot]@users.noreply.github.com"
-          git checkout -b "${{ steps.issue.outputs.branch_name }}"
 
       - name: Analyze and fix with Claude
         id: claude-fix
@@ -216,6 +213,13 @@ jobs:
              - What changes were made
              - Why this fix addresses the issue
 
+          5. **Write a branch slug** to /tmp/branch_slug.txt:
+             - Write a short (2-5 words) description of the root cause, separated by hyphens
+             - Use only lowercase letters and hyphens, no numbers or special characters
+             - Focus on the root cause, not the symptom (e.g., "missing-null-check" not "orders-endpoint-failing")
+             - Examples: "fraud-check-null-email", "missing-total-validation", "unhandled-db-constraint"
+             - Write ONLY the slug, nothing else
+
           IMPORTANT:
           - Only modify files that are necessary to fix the issue
           - Keep changes minimal and focused
@@ -256,18 +260,28 @@ jobs:
             echo "files_changed=true" >> $GITHUB_OUTPUT
           fi
 
+          # Read branch slug from Claude, fallback to issue ID
+          if [ -f "/tmp/branch_slug.txt" ]; then
+            SLUG=$(cat /tmp/branch_slug.txt | tr -d '[:space:]')
+          else
+            SLUG="${ISSUE_ID,,}"
+          fi
+          BRANCH_NAME="hud/${SLUG}/${{ steps.issue.outputs.run_number }}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
           # fix_summary.md is read directly in the PR body step
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Commit and push changes
+      - name: Create branch, commit and push
         if: steps.claude-fix.outputs.files_changed == 'true'
         run: |
+          git checkout -b "${{ steps.claude-fix.outputs.branch_name }}"
           git add -A
           git commit -m "${{ steps.issue.outputs.issue_id }}: ${{ steps.issue.outputs.title }}
 
           Automated fix by Hud (https://hud.io)"
-          git push -u origin "${{ steps.issue.outputs.branch_name }}"
+          git push -u origin "${{ steps.claude-fix.outputs.branch_name }}"
 
       - name: Create Pull Request
         if: steps.claude-fix.outputs.files_changed == 'true'
@@ -323,7 +337,7 @@ jobs:
             --title "$PR_TITLE" \
             --body-file /tmp/pr_body.md \
             --base main \
-            --head "${{ steps.issue.outputs.branch_name }}")
+            --head "${{ steps.claude-fix.outputs.branch_name }}")
 
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
           echo "✅ Created PR: $PR_URL"
