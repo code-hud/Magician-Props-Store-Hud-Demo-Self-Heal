@@ -65,10 +65,15 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - name: Mask app token
+        if: github.event_name == 'repository_dispatch'
+        run: echo "::add-mask::${{ github.event.client_payload.token }}"
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ github.event.client_payload.token || github.token }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -108,8 +113,9 @@ jobs:
           echo "error_count=$ERROR_COUNT" >> $GITHUB_OUTPUT
           echo "time_range=$TIME_RANGE" >> $GITHUB_OUTPUT
 
-          # Create branch name from issue ID
-          BRANCH_NAME="fix/${ISSUE_ID,,}"
+          # Create branch name: hud/<slugified-title-up-to-5-words>/<run_number>
+          SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9 ]//g' | awk '{for(i=1;i<=5&&i<=NF;i++) printf "%s-",$i}' | sed 's/-$//')
+          BRANCH_NAME="hud/${SLUG}/${{ github.run_number }}"
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
           # Write full context to file for Claude
@@ -164,8 +170,8 @@ jobs:
 
       - name: Create fix branch
         run: |
-          git config user.name "Hud"
-          git config user.email "support@hud.io"
+          git config user.name "hud-issuehelper[bot]"
+          git config user.email "216726706+hud-issuehelper[bot]@users.noreply.github.com"
           git checkout -b "${{ steps.issue.outputs.branch_name }}"
 
       - name: Analyze and fix with Claude
@@ -322,7 +328,7 @@ jobs:
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
           echo "✅ Created PR: $PR_URL"
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.event.client_payload.token || github.token }}
 
       - name: Upload artifacts
         if: always()
