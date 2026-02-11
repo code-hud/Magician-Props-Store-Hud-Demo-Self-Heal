@@ -47,6 +47,17 @@ export class OrdersService {
     totalAmount: number,
     items: { productId: number; quantity: number; price: number }[],
   ): Promise<Order> {
+    // Validate required fields
+    if (!customerEmail) {
+      throw new HttpException(
+        {
+          error: 'Validation Error',
+          message: 'Customer email is required',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     // Process checkout through external service
     await this.processCheckout(sessionId, totalAmount, items);
 
