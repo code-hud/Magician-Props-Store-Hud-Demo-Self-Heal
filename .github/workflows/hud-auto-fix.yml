@@ -93,6 +93,8 @@ jobs:
             TIME_RANGE='${{ github.event.client_payload.time_range }}'
             STACK_TRACE='${{ github.event.client_payload.stack_trace }}'
             ADDITIONAL_CONTEXT='${{ github.event.client_payload.additional_context }}'
+            ISSUE_LINK='${{ github.event.client_payload.issue_link }}'
+            ENDPOINT_LINK='${{ github.event.client_payload.endpoint_link }}'
           else
             ISSUE_ID='${{ inputs.issue_id }}'
             TITLE='${{ inputs.title }}'
@@ -102,6 +104,8 @@ jobs:
             TIME_RANGE='${{ inputs.time_range }}'
             STACK_TRACE=''
             ADDITIONAL_CONTEXT=''
+            ISSUE_LINK=''
+            ENDPOINT_LINK=''
           fi
 
           # Set defaults
@@ -112,6 +116,8 @@ jobs:
           echo "endpoint=$ENDPOINT" >> $GITHUB_OUTPUT
           echo "error_count=$ERROR_COUNT" >> $GITHUB_OUTPUT
           echo "time_range=$TIME_RANGE" >> $GITHUB_OUTPUT
+          echo "issue_link=$ISSUE_LINK" >> $GITHUB_OUTPUT
+          echo "endpoint_link=$ENDPOINT_LINK" >> $GITHUB_OUTPUT
 
           # Branch name is finalized after Claude runs (uses Claude's slug)
           echo "run_number=${{ github.run_number }}" >> $GITHUB_OUTPUT
@@ -291,6 +297,22 @@ jobs:
           TITLE="${{ steps.issue.outputs.title }}"
           ERROR_COUNT="${{ steps.issue.outputs.error_count }}"
           TIME_RANGE="${{ steps.issue.outputs.time_range }}"
+          ENDPOINT="${{ steps.issue.outputs.endpoint }}"
+          ISSUE_LINK="${{ steps.issue.outputs.issue_link }}"
+          ENDPOINT_LINK="${{ steps.issue.outputs.endpoint_link }}"
+
+          # Format issue ID and endpoint as links if URLs are provided
+          if [ -n "$ISSUE_LINK" ]; then
+            ISSUE_DISPLAY="[**${ISSUE_ID}**](${ISSUE_LINK})"
+          else
+            ISSUE_DISPLAY="**${ISSUE_ID}**"
+          fi
+
+          if [ -n "$ENDPOINT_LINK" ]; then
+            ENDPOINT_DISPLAY="[${ENDPOINT}](${ENDPOINT_LINK})"
+          else
+            ENDPOINT_DISPLAY="${ENDPOINT}"
+          fi
 
           # Build PR title
           PR_TITLE="${ISSUE_ID}: ${TITLE}"
@@ -310,9 +332,9 @@ jobs:
             echo ''
             echo '---'
             echo ''
-            echo "| Issue | Errors | Time Range |"
-            echo "|-------|--------|------------|"
-            echo "| **${ISSUE_ID}** | ${ERROR_COUNT} | ${TIME_RANGE} |"
+            echo "| Issue | Endpoint | Errors | Time Range |"
+            echo "|-------|----------|--------|------------|"
+            echo "| ${ISSUE_DISPLAY} | ${ENDPOINT_DISPLAY} | ${ERROR_COUNT} | ${TIME_RANGE} |"
             echo ''
             echo '## Root Cause Analysis'
             echo ''
