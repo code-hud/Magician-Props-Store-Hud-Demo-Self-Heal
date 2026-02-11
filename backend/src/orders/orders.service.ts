@@ -9,6 +9,11 @@ export class OrdersService {
   private readonly checkoutServiceUrl =
     process.env.CHECKOUT_SERVICE_URL || 'http://localhost:3002';
 
+  private readonly fraudEmails = new Set([
+    'FRAUD@EXAMPLE.COM',
+    'SCAMMER@TEST.COM',
+  ]);
+
   constructor(
     private orderRepository: OrderRepository,
     private cartRepository: CartRepository,
@@ -47,6 +52,29 @@ export class OrdersService {
     totalAmount: number,
     items: { productId: number; quantity: number; price: number }[],
   ): Promise<Order> {
+    // Fraud detection: validate customer information
+    if (!customerEmail || !customerName) {
+      throw new HttpException(
+        {
+          error: 'Invalid customer information',
+          message: 'Customer email and name are required',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Check against fraud list
+    const normalizedEmail = customerEmail.toUpperCase();
+    if (this.fraudEmails.has(normalizedEmail)) {
+      throw new HttpException(
+        {
+          error: 'Order rejected',
+          message: 'Unable to process this order',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
     // Process checkout through external service
     await this.processCheckout(sessionId, totalAmount, items);
 
