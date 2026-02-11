@@ -250,14 +250,7 @@ jobs:
             echo "files_changed=true" >> $GITHUB_OUTPUT
           fi
 
-          # Read fix summary if it exists
-          if [ -f "/tmp/fix_summary.md" ]; then
-            echo "fix_summary<<EOF" >> $GITHUB_OUTPUT
-            cat /tmp/fix_summary.md >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "fix_summary=Auto-generated fix for $ISSUE_ID" >> $GITHUB_OUTPUT
-          fi
+          # fix_summary.md is read directly in the PR body step
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
@@ -303,7 +296,11 @@ jobs:
             echo ''
             echo '## Root Cause Analysis'
             echo ''
-            echo '${{ steps.claude-fix.outputs.fix_summary }}'
+            if [ -f "/tmp/fix_summary.md" ]; then
+              cat /tmp/fix_summary.md
+            else
+              echo "Auto-generated fix for ${ISSUE_ID}"
+            fi
             echo ''
             echo '## Test Plan'
             echo ''
