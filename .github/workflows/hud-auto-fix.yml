@@ -214,10 +214,11 @@ jobs:
              - Ensure the fix is safe and doesn't introduce regressions
              - Add appropriate error handling if needed
 
-          4. **Write a summary** of your findings to /tmp/fix_summary.md:
+          4. **Write a summary** of your findings to /tmp/fix_summary.md with these sections:
              - Root cause analysis
              - What changes were made
              - Why this fix addresses the issue
+             - **Expected impact**: Estimate how many failed requests per week this fix will prevent, based on the error count and time range provided. Write a short sentence like "This fix is expected to prevent ~X failed requests/week."
 
           5. **Write a branch slug** to /tmp/branch_slug.txt:
              - Write a short (2-5 words) description of the root cause, separated by hyphens
@@ -344,11 +345,15 @@ jobs:
               echo "Auto-generated fix for ${ISSUE_ID}"
             fi
             echo ''
-            echo '## Test Plan'
+            echo '## Validation Plan'
             echo ''
-            echo '- [ ] Verify the fix resolves the issue'
-            echo '- [ ] Run existing tests'
-            echo '- [ ] Monitor error rates after deployment'
+            echo "- [ ] Review code changes"
+            echo "- [ ] Merge and deploy"
+            if [ -n "$ENDPOINT_LINK" ]; then
+              echo "- [ ] [Monitor error rates on Hud after deployment](${ENDPOINT_LINK})"
+            else
+              echo "- [ ] Monitor error rates on Hud after deployment"
+            fi
             echo ''
             echo '---'
             echo ''
@@ -359,7 +364,8 @@ jobs:
             --title "$PR_TITLE" \
             --body-file /tmp/pr_body.md \
             --base main \
-            --head "${{ steps.claude-fix.outputs.branch_name }}")
+            --head "${{ steps.claude-fix.outputs.branch_name }}" \
+            --label "hud")
 
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
           echo "✅ Created PR: $PR_URL"
