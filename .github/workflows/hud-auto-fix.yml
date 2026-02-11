@@ -311,7 +311,7 @@ jobs:
 
           # Format issue ID and endpoint as links if URLs are provided
           if [ -n "$ISSUE_LINK" ]; then
-            ISSUE_DISPLAY="[${ISSUE_ID}](${ISSUE_LINK})"
+            ISSUE_DISPLAY="[View in Hud](${ISSUE_LINK})"
           else
             ISSUE_DISPLAY="${ISSUE_ID}"
           fi
@@ -327,8 +327,6 @@ jobs:
 
           # Build PR body
           {
-            echo '<a href="https://hud.io"><picture><source media="(prefers-color-scheme: dark)" srcset="https://cdn.hud.io/Hud_icon_white.png"><source media="(prefers-color-scheme: light)" srcset="https://cdn.hud.io/Hud_icon_black.png"><img alt="Hud" src="https://cdn.hud.io/Hud_icon_white.png" width="36"></picture></a>'
-            echo ''
             echo "${ISSUE_DISPLAY} &nbsp;&middot;&nbsp; ${ENDPOINT_DISPLAY} &nbsp;&middot;&nbsp; **${ERROR_COUNT}** errors &nbsp;&middot;&nbsp; ${TIME_RANGE}"
             echo ''
             echo '---'
@@ -351,7 +349,7 @@ jobs:
               echo "- [ ] Monitor error rates on Hud"
             fi
             echo ''
-            echo '<sub><a href="https://hud.io">hud.io</a> &nbsp;&middot;&nbsp; <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">workflow run</a></sub>'
+            echo '<sub><a href="https://hud.io">hud.io</a> &nbsp;&middot;&nbsp; <a href="https://docs.hud.io">docs</a> &nbsp;&middot;&nbsp; <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">workflow run</a></sub>'
           } > /tmp/pr_body.md
 
           PR_URL=$(gh pr create \
