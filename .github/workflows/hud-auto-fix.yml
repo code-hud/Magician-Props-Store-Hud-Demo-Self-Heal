@@ -223,9 +223,9 @@ jobs:
              <bulleted list of specific changes, referencing file paths>
 
              ### Expected Impact
-             <1 sentence estimating how many failed requests/week this fix will prevent, based on the error count and time range>
+             <1 plain-text sentence estimating how many failed requests/week this fix will prevent, based on the error count and time range. Do NOT use bold, headings, or any markdown formatting in this sentence.>
 
-             Do NOT add any other headers or sections. Keep it concise and professional.
+             Do NOT add any other headers or sections. Keep it concise and professional. All content under headers must be plain text or simple bullet points — no bold, no headings, no extra markdown formatting.
 
           5. **Write a branch slug** to /tmp/branch_slug.txt:
              - Write a short (2-5 words) description of the root cause, separated by hyphens
