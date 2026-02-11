@@ -1,0 +1,364 @@
+# Hud Auto-Fix Workflow
+# Triggered by webhook with issue context, analyzes root cause using Hud MCP,
+# and opens a PR with a suggested fix.
+#
+# Webhook payload (repository_dispatch) should include:
+# {
+#   "event_type": "hud-issue",
+#   "client_payload": {
+#     "issue_id": "HUD-007",
+#     "title": "POST /Orders endpoints failed 3.54k times in 7d",
+#     "description": "...",
+#     "error_count": 3540,
+#     "time_range": "7d",
+#     "endpoint": "POST /orders",
+#     "stack_trace": "...",
+#     "additional_context": "..."
+#   }
+# }
+#
+# Required secrets:
+# - ANTHROPIC_API_KEY
+# - HUD_API_KEY
+
+name: Hud Auto-Fix
+
+on:
+  repository_dispatch:
+    types: [hud-issue]
+  workflow_dispatch:
+    inputs:
+      issue_id:
+        description: 'Hud issue ID (e.g., HUD-007)'
+        required: true
+        type: string
+      title:
+        description: 'Issue title'
+        required: true
+        type: string
+      description:
+        description: 'Issue description'
+        required: false
+        type: string
+      endpoint:
+        description: 'Affected endpoint (e.g., POST /orders)'
+        required: false
+        type: string
+      error_count:
+        description: 'Number of errors'
+        required: false
+        type: string
+      time_range:
+        description: 'Time range (e.g., 7d)'
+        required: false
+        default: '7d'
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  analyze-and-fix:
+    name: Analyze Issue & Create Fix PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Extract issue context
+        id: issue
+        run: |
+          # Extract from repository_dispatch or workflow_dispatch
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            ISSUE_ID='${{ github.event.client_payload.issue_id }}'
+            TITLE='${{ github.event.client_payload.title }}'
+            DESCRIPTION='${{ github.event.client_payload.description }}'
+            ENDPOINT='${{ github.event.client_payload.endpoint }}'
+            ERROR_COUNT='${{ github.event.client_payload.error_count }}'
+            TIME_RANGE='${{ github.event.client_payload.time_range }}'
+            STACK_TRACE='${{ github.event.client_payload.stack_trace }}'
+            ADDITIONAL_CONTEXT='${{ github.event.client_payload.additional_context }}'
+          else
+            ISSUE_ID='${{ inputs.issue_id }}'
+            TITLE='${{ inputs.title }}'
+            DESCRIPTION='${{ inputs.description }}'
+            ENDPOINT='${{ inputs.endpoint }}'
+            ERROR_COUNT='${{ inputs.error_count }}'
+            TIME_RANGE='${{ inputs.time_range }}'
+            STACK_TRACE=''
+            ADDITIONAL_CONTEXT=''
+          fi
+
+          # Set defaults
+          TIME_RANGE="${TIME_RANGE:-7d}"
+
+          echo "issue_id=$ISSUE_ID" >> $GITHUB_OUTPUT
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          echo "endpoint=$ENDPOINT" >> $GITHUB_OUTPUT
+          echo "error_count=$ERROR_COUNT" >> $GITHUB_OUTPUT
+          echo "time_range=$TIME_RANGE" >> $GITHUB_OUTPUT
+
+          # Create branch name from issue ID
+          BRANCH_NAME="fix/${ISSUE_ID,,}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+          # Write full context to file for Claude
+          cat > /tmp/issue_context.txt << 'ISSUE_EOF'
+          Issue ID: $ISSUE_ID
+          Title: $TITLE
+          Endpoint: $ENDPOINT
+          Error Count: $ERROR_COUNT
+          Time Range: $TIME_RANGE
+
+          Description:
+          $DESCRIPTION
+
+          Stack Trace:
+          $STACK_TRACE
+
+          Additional Context:
+          $ADDITIONAL_CONTEXT
+          ISSUE_EOF
+
+          # Use envsubst to expand variables
+          export ISSUE_ID TITLE DESCRIPTION ENDPOINT ERROR_COUNT TIME_RANGE STACK_TRACE ADDITIONAL_CONTEXT
+          envsubst < /tmp/issue_context.txt > /tmp/issue_context_expanded.txt
+          mv /tmp/issue_context_expanded.txt /tmp/issue_context.txt
+
+          echo "Issue context:"
+          cat /tmp/issue_context.txt
+
+      - name: Setup Hud MCP configuration
+        run: |
+          mkdir -p ~/.claude
+          cat > ~/.claude/mcp_servers.json << EOF
+          {
+            "mcpServers": {
+              "hud-ng": {
+                "command": "npx",
+                "args": ["-y", "hud-mcp@prerelease"],
+                "env": {
+                  "HUD_API_KEY": "${{ secrets.HUD_API_KEY }}"
+                }
+              }
+            }
+          }
+          EOF
+          echo "MCP configuration created"
+
+      - name: Install Claude Code CLI
+        run: |
+          echo "Installing Claude Code CLI..."
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Create fix branch
+        run: |
+          git config user.name "Hud"
+          git config user.email "support@hud.io"
+          git checkout -b "${{ steps.issue.outputs.branch_name }}"
+
+      - name: Analyze and fix with Claude
+        id: claude-fix
+        run: |
+          echo "🔍 Analyzing issue and generating fix..."
+
+          ISSUE_ID="${{ steps.issue.outputs.issue_id }}"
+          TITLE="${{ steps.issue.outputs.title }}"
+
+          # Build the prompt
+          cat > /tmp/fix_prompt.txt << 'PROMPT_EOF'
+          You are a senior software engineer tasked with fixing a production issue.
+
+          ## Issue Context
+          PROMPT_EOF
+
+          cat /tmp/issue_context.txt >> /tmp/fix_prompt.txt
+
+          cat >> /tmp/fix_prompt.txt << 'PROMPT_EOF'
+
+          ## Your Task
+
+          1. **Investigate the root cause** using the Hud MCP tools:
+             - Use `hud-get-schema` to understand the available data tables
+             - Use `hud-query` to run SQL queries against Hud's data to find error patterns and insights related to this issue
+             - Use `hud-get-forensics` to get detailed forensics for this issue
+             - Use `hud-get-skill` if there are any relevant skills/fixes already documented
+
+          2. **Analyze the codebase** to find the problematic code:
+             - Search for the affected endpoint/functionality
+             - Understand the code flow that leads to the error
+             - Identify the root cause
+
+          3. **Implement a fix**:
+             - Make the minimal necessary changes to fix the issue
+             - Ensure the fix is safe and doesn't introduce regressions
+             - Add appropriate error handling if needed
+
+          4. **Write a summary** of your findings to /tmp/fix_summary.md:
+             - Root cause analysis
+             - What changes were made
+             - Why this fix addresses the issue
+
+          IMPORTANT:
+          - Only modify files that are necessary to fix the issue
+          - Keep changes minimal and focused
+          - Do not refactor unrelated code
+          - Do not add unnecessary comments or documentation
+          PROMPT_EOF
+
+          echo "Prompt size: $(wc -c < /tmp/fix_prompt.txt) bytes"
+
+          # Run Claude with Hud MCP
+          OUTPUT_FILE="/tmp/claude_output.txt"
+          STDERR_FILE="/tmp/claude_stderr.txt"
+
+          set +e
+          cat /tmp/fix_prompt.txt | claude \
+            -p \
+            --model "sonnet" \
+            --mcp-config ~/.claude/mcp_servers.json \
+            --dangerously-skip-permissions \
+            > "$OUTPUT_FILE" 2>"$STDERR_FILE"
+          CLAUDE_EXIT=$?
+          set -e
+
+          echo "Claude exit code: $CLAUDE_EXIT"
+
+          if [ "$CLAUDE_EXIT" -ne 0 ]; then
+            echo "::warning::Claude CLI exited with code $CLAUDE_EXIT"
+            tail -50 "$STDERR_FILE"
+          fi
+
+          # Check if any files were modified
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "::warning::No files were modified by Claude"
+            echo "files_changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "Files were modified:"
+            git status --short
+            echo "files_changed=true" >> $GITHUB_OUTPUT
+          fi
+
+          # Read fix summary if it exists
+          if [ -f "/tmp/fix_summary.md" ]; then
+            echo "fix_summary<<EOF" >> $GITHUB_OUTPUT
+            cat /tmp/fix_summary.md >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "fix_summary=Auto-generated fix for $ISSUE_ID" >> $GITHUB_OUTPUT
+          fi
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Commit and push changes
+        if: steps.claude-fix.outputs.files_changed == 'true'
+        run: |
+          git add -A
+          git commit -m "${{ steps.issue.outputs.issue_id }}: ${{ steps.issue.outputs.title }}
+
+          Automated fix by Hud (https://hud.io)"
+          git push -u origin "${{ steps.issue.outputs.branch_name }}"
+
+      - name: Create Pull Request
+        if: steps.claude-fix.outputs.files_changed == 'true'
+        id: create-pr
+        run: |
+          ISSUE_ID="${{ steps.issue.outputs.issue_id }}"
+          TITLE="${{ steps.issue.outputs.title }}"
+          ERROR_COUNT="${{ steps.issue.outputs.error_count }}"
+          TIME_RANGE="${{ steps.issue.outputs.time_range }}"
+
+          # Build PR title
+          PR_TITLE="${ISSUE_ID}: ${TITLE}"
+
+          # Build PR body with Hud branding
+          cat > /tmp/pr_body.md << 'EOF'
+<div align="center">
+  <a href="https://hud.io">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://cdn.hud.io/Hud_icon_white.png">
+      <source media="(prefers-color-scheme: light)" srcset="https://cdn.hud.io/Hud_icon_black.png">
+      <img alt="Hud" src="https://cdn.hud.io/Hud_icon_white.png" width="120">
+    </picture>
+  </a>
+  <h3>Automated Fix</h3>
+</div>
+
+---
+
+EOF
+
+          cat >> /tmp/pr_body.md << EOF
+| Issue | Errors | Time Range |
+|-------|--------|------------|
+| **${ISSUE_ID}** | ${ERROR_COUNT} | ${TIME_RANGE} |
+
+## 🔍 Root Cause Analysis
+
+${{ steps.claude-fix.outputs.fix_summary }}
+
+## ✅ Test Plan
+
+- [ ] Verify the fix resolves the issue
+- [ ] Run existing tests
+- [ ] Monitor error rates after deployment
+
+---
+
+<sub>🤖 This PR was automatically generated by **[Hud](https://hud.io)** after detecting and analyzing production errors. [View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})</sub>
+EOF
+
+          PR_URL=$(gh pr create \
+            --title "$PR_TITLE" \
+            --body-file /tmp/pr_body.md \
+            --base main \
+            --head "${{ steps.issue.outputs.branch_name }}")
+
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+          echo "✅ Created PR: $PR_URL"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hud-auto-fix-${{ steps.issue.outputs.issue_id }}-${{ github.run_number }}
+          path: |
+            /tmp/issue_context.txt
+            /tmp/fix_prompt.txt
+            /tmp/fix_summary.md
+            /tmp/claude_output.txt
+            /tmp/claude_stderr.txt
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Report status
+        if: always()
+        run: |
+          echo "## 🔮 Hud Auto-Fix Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Issue:** ${{ steps.issue.outputs.issue_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Title:** ${{ steps.issue.outputs.title }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.claude-fix.outputs.files_changed }}" = "true" ]; then
+            echo "✅ **Status:** Fix generated and PR created" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**PR:** ${{ steps.create-pr.outputs.pr_url }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Status:** No code changes were made" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Claude analyzed the issue but did not modify any files. Check the artifacts for details." >> $GITHUB_STEP_SUMMARY
+          fi
