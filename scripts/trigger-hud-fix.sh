@@ -35,21 +35,23 @@ TOKEN=$(curl -s -X POST \
 echo "Generated installation token"
 
 # --- Parse arguments or use defaults ---
-TITLE="${1:-POST /orders endpoints failed 3.54k times in 7d due to a faulty fraud handling mechanism}"
-DESCRIPTION="${2:-The endpoint POST /orders failed 3.54k times in the last 7d with error Typerror- Cannot read properties of undefined (reading toUpperCase) thrown from OrdersService.processCheckout(sessionId, totalAmount, items). Only investigate this error and not other errors.}"
-ERROR_COUNT="${3:-3540}"
-TIME_RANGE="${4:-7d}"
-ENDPOINT="${5:-POST /orders}"
-ISSUE_LINK="${6:-}"
-ENDPOINT_LINK="${7:-}"
+ISSUE_ID="${1:-HUD-5220}"
+TITLE="${2:-POST /orders endpoints failed 3.54k times in 7d due to a faulty fraud handling mechanism}"
+DESCRIPTION="${3:-The endpoint POST /orders failed 3.54k times in the last 7d with error Typerror- Cannot read properties of undefined (reading toUpperCase) thrown from OrdersService.processCheckout(sessionId, totalAmount, items). Only investigate this error and not other errors.}"
+ERROR_COUNT="${4:-3540}"
+TIME_RANGE="${5:-7d}"
+ENDPOINT="${6:-POST /orders}"
+ISSUE_LINK="${7:-}"
+ENDPOINT_LINK="${8:-}"
 
 # --- Build JSON payload ---
-export TITLE DESCRIPTION ERROR_COUNT TIME_RANGE ENDPOINT ISSUE_LINK ENDPOINT_LINK TOKEN
+export ISSUE_ID TITLE DESCRIPTION ERROR_COUNT TIME_RANGE ENDPOINT ISSUE_LINK ENDPOINT_LINK TOKEN
 PAYLOAD=$(python3 << 'PYEOF'
 import json, os
 print(json.dumps({
     "event_type": "hud-issue",
     "client_payload": {
+        "issue_id": os.environ["ISSUE_ID"],
         "title": os.environ["TITLE"],
         "description": os.environ["DESCRIPTION"],
         "error_count": int(os.environ["ERROR_COUNT"]),
