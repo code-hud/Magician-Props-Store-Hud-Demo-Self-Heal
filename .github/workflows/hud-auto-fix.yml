@@ -154,8 +154,14 @@ jobs:
 
           # Build Jira description in ADF (Atlassian Document Format)
           # Each piece of info gets its own paragraph so newlines render properly
+          if [ -n "$ERROR_COUNT" ] && [ "$ERROR_COUNT" -gt 0 ] 2>/dev/null; then
+            MAIN_TEXT="Hud detected ${ERROR_COUNT} errors on ${ENDPOINT} over ${TIME_RANGE}."
+          else
+            MAIN_TEXT="Hud detected a performance degradation on ${ENDPOINT}."
+          fi
+
           PARAGRAPHS=$(jq -n \
-            --arg main "Hud detected ${ERROR_COUNT} errors on ${ENDPOINT} over ${TIME_RANGE}." \
+            --arg main "$MAIN_TEXT" \
             --arg issue_link "$ISSUE_LINK" \
             --arg endpoint_link "$ENDPOINT_LINK" \
             '[
@@ -280,7 +286,7 @@ jobs:
              <bulleted list of specific changes, referencing file paths. Use inline code backticks for file paths, function names, status codes, and other code references (e.g. `src/orders/orders.service.ts:17-40`, `HttpStatus.TOO_MANY_REQUESTS`).>
 
              ### Expected Impact
-             <1 plain-text sentence estimating how many failed requests/week this fix will prevent, based on the error count and time range. Do NOT use bold, headings, or any markdown formatting in this sentence.>
+             <1 plain-text sentence describing the expected improvement. For error-related issues, estimate how many failed requests/week this fix will prevent based on the error count and time range. For performance/slowdown issues, estimate the latency improvement (e.g. "should reduce p50 response time from 3.5s back to ~20ms"). Do NOT use bold, headings, or any markdown formatting in this sentence.>
 
              Do NOT add any other headers or sections. Keep it concise and professional. Use inline code backticks for file paths, function names, and code references. Do not add extra headings.
 
@@ -406,7 +412,10 @@ jobs:
               METADATA_LINE="${METADATA_LINE}[${JIRA_KEY}](${JIRA_URL})"
             fi
             [ -n "$METADATA_LINE" ] && METADATA_LINE="${METADATA_LINE} &nbsp;&middot;&nbsp; "
-            METADATA_LINE="${METADATA_LINE}${ENDPOINT_DISPLAY} &nbsp;&middot;&nbsp; **${ERROR_COUNT}** errors / ${TIME_RANGE}"
+            METADATA_LINE="${METADATA_LINE}${ENDPOINT_DISPLAY}"
+            if [ -n "$ERROR_COUNT" ] && [ "$ERROR_COUNT" -gt 0 ] 2>/dev/null; then
+              METADATA_LINE="${METADATA_LINE} &nbsp;&middot;&nbsp; **${ERROR_COUNT}** errors / ${TIME_RANGE}"
+            fi
             echo "$METADATA_LINE"
             echo ''
             echo '---'
@@ -424,9 +433,9 @@ jobs:
             echo "- [ ] Review code changes"
             echo "- [ ] Merge and deploy"
             if [ -n "$ENDPOINT_LINK" ]; then
-              echo "- [ ] [Monitor error rates on Hud](${ENDPOINT_LINK})"
+              echo "- [ ] [Monitor on Hud](${ENDPOINT_LINK})"
             else
-              echo "- [ ] Monitor error rates on Hud"
+              echo "- [ ] Monitor on Hud"
             fi
             echo ''
             echo '<sub><a href="https://hud.io">hud.io</a> &nbsp;&middot;&nbsp; <a href="https://docs.hud.io">docs</a> &nbsp;&middot;&nbsp; <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">workflow run</a></sub>'
