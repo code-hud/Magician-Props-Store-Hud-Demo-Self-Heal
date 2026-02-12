@@ -225,11 +225,11 @@ jobs:
           cat > ~/.claude/mcp_servers.json << EOF
           {
             "mcpServers": {
-              "hud-ng": {
+              "hud": {
                 "command": "npx",
                 "args": ["-y", "hud-mcp@prerelease"],
                 "env": {
-                  "HUD_API_KEY": "${{ secrets.HUD_API_KEY }}"
+                  "HUD_MCP_KEY": "${{ secrets.HUD_API_KEY }}"
                 }
               }
             }
