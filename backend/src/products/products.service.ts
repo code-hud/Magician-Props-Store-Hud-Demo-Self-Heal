@@ -23,20 +23,29 @@ export class ProductsService {
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-    const productsWithPopularity: ProductWithPopularity[] = [];
-    for (const product of products) {
-      const orderCount = await this.orderItemRepository.count({
-        where: {
-          product_id: product.id,
-          created_at: MoreThanOrEqual(oneWeekAgo),
-        }
-      });
+    // Get all order counts in a single query using GROUP BY
+    const productIds = products.map(p => p.id);
 
-      productsWithPopularity.push({
-        ...product,
-        timesOrdered: orderCount,
-      });
-    }
+    const orderCounts = await this.orderItemRepository
+      .createQueryBuilder('orderItem')
+      .select('orderItem.product_id', 'productId')
+      .addSelect('COUNT(*)', 'count')
+      .where('orderItem.product_id IN (:...productIds)', { productIds })
+      .andWhere('orderItem.created_at >= :oneWeekAgo', { oneWeekAgo })
+      .groupBy('orderItem.product_id')
+      .getRawMany();
+
+    // Create a map for O(1) lookup
+    const orderCountMap = new Map<number, number>();
+    orderCounts.forEach((row) => {
+      orderCountMap.set(row.productId, parseInt(row.count, 10));
+    });
+
+    // Attach popularity counts to products
+    const productsWithPopularity: ProductWithPopularity[] = products.map(product => ({
+      ...product,
+      timesOrdered: orderCountMap.get(product.id) || 0,
+    }));
 
     return productsWithPopularity;
   }
