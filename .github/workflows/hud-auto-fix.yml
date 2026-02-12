@@ -324,6 +324,7 @@ jobs:
             -p \
             --model "sonnet" \
             --output-format stream-json \
+            --verbose \
             --mcp-config ~/.claude/mcp_servers.json \
             --dangerously-skip-permissions \
             > "$STREAM_FILE" 2>"$STDERR_FILE"
