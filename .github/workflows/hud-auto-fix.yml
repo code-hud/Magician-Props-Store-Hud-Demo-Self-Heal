@@ -362,7 +362,7 @@ jobs:
         if: steps.claude-fix.outputs.files_changed == 'true'
         run: |
           git checkout -b "${{ steps.claude-fix.outputs.branch_name }}"
-          git add -A
+          git add -A ':!.github/workflows'
           JIRA_KEY="${{ steps.jira.outputs.jira_key }}"
           if [ -n "$JIRA_KEY" ]; then
             COMMIT_PREFIX="${JIRA_KEY}: "
