@@ -20,23 +20,33 @@ export class ProductsService {
   async findAll(search?: string, category?: string): Promise<ProductWithPopularity[]> {
     const products = await this.productRepository.searchWithFilters(search, category);
 
+    if (products.length === 0) {
+      return [];
+    }
+
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-    const productsWithPopularity: ProductWithPopularity[] = [];
-    for (const product of products) {
-      const orderCount = await this.orderItemRepository.count({
-        where: {
-          product_id: product.id,
-          created_at: MoreThanOrEqual(oneWeekAgo),
-        }
-      });
+    const productIds = products.map(p => p.id);
 
-      productsWithPopularity.push({
-        ...product,
-        timesOrdered: orderCount,
-      });
-    }
+    const orderCounts = await this.orderItemRepository
+      .createQueryBuilder('orderItem')
+      .select('orderItem.product_id', 'productId')
+      .addSelect('COUNT(*)', 'count')
+      .where('orderItem.product_id IN (:...productIds)', { productIds })
+      .andWhere('orderItem.created_at >= :oneWeekAgo', { oneWeekAgo })
+      .groupBy('orderItem.product_id')
+      .getRawMany();
+
+    const orderCountMap = new Map<number, number>();
+    orderCounts.forEach(row => {
+      orderCountMap.set(row.productId, parseInt(row.count, 10));
+    });
+
+    const productsWithPopularity: ProductWithPopularity[] = products.map(product => ({
+      ...product,
+      timesOrdered: orderCountMap.get(product.id) || 0,
+    }));
 
     return productsWithPopularity;
   }
