@@ -92,6 +92,7 @@ jobs:
             ADDITIONAL_CONTEXT='${{ github.event.client_payload.additional_context }}'
             ISSUE_LINK='${{ github.event.client_payload.issue_link }}'
             ENDPOINT_LINK='${{ github.event.client_payload.endpoint_link }}'
+            SLOWDOWN='${{ github.event.client_payload.slowdown }}'
           else
             TITLE='${{ inputs.title }}'
             DESCRIPTION='${{ inputs.description }}'
@@ -102,6 +103,7 @@ jobs:
             ADDITIONAL_CONTEXT=''
             ISSUE_LINK=''
             ENDPOINT_LINK=''
+            SLOWDOWN=''
           fi
 
           # Set defaults
@@ -113,6 +115,7 @@ jobs:
           echo "time_range=$TIME_RANGE" >> $GITHUB_OUTPUT
           echo "issue_link=$ISSUE_LINK" >> $GITHUB_OUTPUT
           echo "endpoint_link=$ENDPOINT_LINK" >> $GITHUB_OUTPUT
+          echo "slowdown=$SLOWDOWN" >> $GITHUB_OUTPUT
 
           # Branch name is finalized after Claude runs (uses Claude's slug)
           echo "run_number=${{ github.run_number }}" >> $GITHUB_OUTPUT
@@ -154,10 +157,14 @@ jobs:
 
           # Build Jira description in ADF (Atlassian Document Format)
           # Each piece of info gets its own paragraph so newlines render properly
+          SLOWDOWN="${{ steps.issue.outputs.slowdown }}"
+
           if [ -n "$ERROR_COUNT" ] && [ "$ERROR_COUNT" -gt 0 ] 2>/dev/null; then
             MAIN_TEXT="Hud detected ${ERROR_COUNT} errors on ${ENDPOINT} over ${TIME_RANGE}."
+          elif [ -n "$SLOWDOWN" ]; then
+            MAIN_TEXT="Hud detected a performance degradation on ${ENDPOINT}: ${SLOWDOWN}."
           else
-            MAIN_TEXT="Hud detected a performance degradation on ${ENDPOINT}."
+            MAIN_TEXT="Hud detected an issue on ${ENDPOINT}."
           fi
 
           PARAGRAPHS=$(jq -n \
@@ -411,10 +418,14 @@ jobs:
               [ -n "$METADATA_LINE" ] && METADATA_LINE="${METADATA_LINE} &nbsp;&middot;&nbsp; "
               METADATA_LINE="${METADATA_LINE}[${JIRA_KEY}](${JIRA_URL})"
             fi
+            SLOWDOWN="${{ steps.issue.outputs.slowdown }}"
+
             [ -n "$METADATA_LINE" ] && METADATA_LINE="${METADATA_LINE} &nbsp;&middot;&nbsp; "
             METADATA_LINE="${METADATA_LINE}${ENDPOINT_DISPLAY}"
             if [ -n "$ERROR_COUNT" ] && [ "$ERROR_COUNT" -gt 0 ] 2>/dev/null; then
               METADATA_LINE="${METADATA_LINE} &nbsp;&middot;&nbsp; **${ERROR_COUNT}** errors / ${TIME_RANGE}"
+            elif [ -n "$SLOWDOWN" ]; then
+              METADATA_LINE="${METADATA_LINE} &nbsp;&middot;&nbsp; ${SLOWDOWN}"
             fi
             echo "$METADATA_LINE"
             echo ''

@@ -42,21 +42,24 @@ TIME_RANGE="${4:-7d}"
 ENDPOINT="${5:-POST /orders}"
 ISSUE_LINK="${6:-}"
 ENDPOINT_LINK="${7:-}"
+SLOWDOWN="${8:-}"
 
 # --- Build JSON payload ---
-export TITLE DESCRIPTION ERROR_COUNT TIME_RANGE ENDPOINT ISSUE_LINK ENDPOINT_LINK TOKEN
+export TITLE DESCRIPTION ERROR_COUNT TIME_RANGE ENDPOINT ISSUE_LINK ENDPOINT_LINK SLOWDOWN TOKEN
 PAYLOAD=$(python3 << 'PYEOF'
 import json, os
+ec = os.environ["ERROR_COUNT"]
 print(json.dumps({
     "event_type": "hud-issue",
     "client_payload": {
         "title": os.environ["TITLE"],
         "description": os.environ["DESCRIPTION"],
-        "error_count": int(os.environ["ERROR_COUNT"]),
+        "error_count": int(ec) if ec else 0,
         "time_range": os.environ["TIME_RANGE"],
         "endpoint": os.environ["ENDPOINT"],
         "issue_link": os.environ["ISSUE_LINK"],
         "endpoint_link": os.environ["ENDPOINT_LINK"],
+        "slowdown": os.environ["SLOWDOWN"],
         "token": os.environ["TOKEN"]
     }
 }))
