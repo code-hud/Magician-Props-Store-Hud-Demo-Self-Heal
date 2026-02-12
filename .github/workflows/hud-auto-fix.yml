@@ -282,7 +282,7 @@ jobs:
           3. **Implement a fix**:
              - Make the minimal necessary changes to fix the issue
              - Ensure the fix is safe and doesn't introduce regressions
-             - Add appropriate error handling if needed
+             - The endpoint must NEVER return 5XX errors. Handle all errors gracefully — if the issue stems from bad user input or client-side mistakes, return a 400 with a clear error message instead of letting the exception bubble up as a 500
 
           4. **Write a summary** of your findings to /tmp/fix_summary.md using EXACTLY this format (keep the headers as-is):
 
