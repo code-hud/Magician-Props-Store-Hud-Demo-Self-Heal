@@ -163,20 +163,25 @@ jobs:
           ENDPOINT_LINK="${{ steps.issue.outputs.endpoint_link }}"
 
           # Build Jira description in ADF (Atlassian Document Format)
-          DESCRIPTION_TEXT="Hud detected ${ERROR_COUNT} errors on ${ENDPOINT} over ${TIME_RANGE}."
-
-          # Add links if available
-          LINKS_TEXT=""
-          if [ -n "$ISSUE_LINK" ]; then
-            LINKS_TEXT="${LINKS_TEXT}\nHud issue: ${ISSUE_LINK}"
-          fi
-          if [ -n "$ENDPOINT_LINK" ]; then
-            LINKS_TEXT="${LINKS_TEXT}\nEndpoint: ${ENDPOINT_LINK}"
-          fi
+          # Each piece of info gets its own paragraph so newlines render properly
+          PARAGRAPHS=$(jq -n \
+            --arg main "Hud detected ${ERROR_COUNT} errors on ${ENDPOINT} over ${TIME_RANGE}." \
+            --arg issue_link "$ISSUE_LINK" \
+            --arg endpoint_link "$ENDPOINT_LINK" \
+            '[
+              { type: "paragraph", content: [{ type: "text", text: $main }] }
+            ]
+            + if $issue_link != "" then
+                [{ type: "paragraph", content: [{ type: "text", text: ("Hud issue: " + $issue_link) }] }]
+              else [] end
+            + if $endpoint_link != "" then
+                [{ type: "paragraph", content: [{ type: "text", text: ("Endpoint: " + $endpoint_link) }] }]
+              else [] end
+            ')
 
           jq -n \
             --arg summary "[${ISSUE_ID}] ${TITLE}" \
-            --arg desc "${DESCRIPTION_TEXT}${LINKS_TEXT}" \
+            --argjson paragraphs "$PARAGRAPHS" \
             '{
               fields: {
                 project: { key: "MAGSTORE" },
@@ -185,14 +190,7 @@ jobs:
                 description: {
                   type: "doc",
                   version: 1,
-                  content: [
-                    {
-                      type: "paragraph",
-                      content: [
-                        { type: "text", text: $desc }
-                      ]
-                    }
-                  ]
+                  content: $paragraphs
                 }
               }
             }' > /tmp/jira_payload.json
@@ -290,12 +288,12 @@ jobs:
              <1-2 concise paragraphs explaining the root cause>
 
              ### Changes Made
-             <bulleted list of specific changes, referencing file paths>
+             <bulleted list of specific changes, referencing file paths. Use inline code backticks for file paths, function names, status codes, and other code references (e.g. `src/orders/orders.service.ts:17-40`, `HttpStatus.TOO_MANY_REQUESTS`).>
 
              ### Expected Impact
              <1 plain-text sentence estimating how many failed requests/week this fix will prevent, based on the error count and time range. Do NOT use bold, headings, or any markdown formatting in this sentence.>
 
-             Do NOT add any other headers or sections. Keep it concise and professional. All content under headers must be plain text or simple bullet points — no bold, no headings, no extra markdown formatting.
+             Do NOT add any other headers or sections. Keep it concise and professional. Use inline code backticks for file paths, function names, and code references. Do not add extra headings.
 
           5. **Write a branch slug** to /tmp/branch_slug.txt:
              - Write a short (2-5 words) description of the root cause, separated by hyphens
@@ -400,11 +398,11 @@ jobs:
 
           # Build PR body
           {
-            echo "${ISSUE_DISPLAY} &nbsp;&middot;&nbsp; ${ENDPOINT_DISPLAY} &nbsp;&middot;&nbsp; **${ERROR_COUNT}** errors &nbsp;&middot;&nbsp; ${TIME_RANGE}"
+            METADATA_LINE="${ISSUE_DISPLAY} &nbsp;&middot;&nbsp; ${ENDPOINT_DISPLAY} &nbsp;&middot;&nbsp; **${ERROR_COUNT}** errors &nbsp;&middot;&nbsp; ${TIME_RANGE}"
             if [ -n "$JIRA_KEY" ]; then
-              echo ""
-              echo "**Jira:** [${JIRA_KEY}](${JIRA_URL})"
+              METADATA_LINE="${METADATA_LINE} &nbsp;&middot;&nbsp; [${JIRA_KEY}](${JIRA_URL})"
             fi
+            echo "$METADATA_LINE"
             echo ''
             echo '---'
             echo ''
@@ -441,11 +439,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.event.client_payload.token || github.token }}
 
-      - name: Update Jira ticket with PR link
+      - name: Update Jira ticket with fix details
         if: steps.claude-fix.outputs.files_changed == 'true' && steps.jira.outputs.jira_key != ''
         run: |
           JIRA_KEY="${{ steps.jira.outputs.jira_key }}"
           PR_URL="${{ steps.create-pr.outputs.pr_url }}"
+
+          # Read the fix summary (contains Root Cause, Changes Made, Expected Impact)
+          FIX_SUMMARY=""
+          if [ -f "/tmp/fix_summary.md" ]; then
+            FIX_SUMMARY=$(cat /tmp/fix_summary.md)
+          fi
 
           # Fetch current description from the ticket
           CURRENT=$(curl -s \
@@ -453,21 +457,28 @@ jobs:
             -u "${{ secrets.JIRA_USER_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
             "${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue/${JIRA_KEY}?fields=description")
 
-          # Append a PR link paragraph to the existing description content array
-          UPDATED_DESC=$(echo "$CURRENT" | jq --arg pr "$PR_URL" '
-            .fields.description.content += [
-              {
-                type: "paragraph",
-                content: [
-                  { type: "text", text: "Fix PR: " },
-                  {
-                    type: "text",
-                    text: $pr,
-                    marks: [{ type: "link", attrs: { href: $pr } }]
-                  }
-                ]
-              }
-            ] | { fields: { description: .fields.description } }
+          # Build new paragraphs: fix summary + PR link
+          NEW_PARAGRAPHS=$(jq -n --arg summary "$FIX_SUMMARY" --arg pr "$PR_URL" '
+            [
+              { type: "rule" },
+              { type: "paragraph", content: [
+                { type: "text", text: $summary }
+              ]},
+              { type: "rule" },
+              { type: "paragraph", content: [
+                { type: "text", text: "Fix PR: " },
+                {
+                  type: "text",
+                  text: $pr,
+                  marks: [{ type: "link", attrs: { href: $pr } }]
+                }
+              ]}
+            ]')
+
+          # Append to existing description
+          UPDATED_DESC=$(echo "$CURRENT" | jq --argjson new "$NEW_PARAGRAPHS" '
+            .fields.description.content += $new
+            | { fields: { description: .fields.description } }
           ')
 
           echo "$UPDATED_DESC" > /tmp/jira_update.json
@@ -480,7 +491,7 @@ jobs:
             -d @/tmp/jira_update.json)
 
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            echo "✅ Updated $JIRA_KEY with PR link"
+            echo "✅ Updated $JIRA_KEY with fix details and PR link"
           else
             echo "::warning::Failed to update Jira ticket $JIRA_KEY (HTTP $HTTP_CODE)"
           fi
