@@ -47,6 +47,17 @@ export class OrdersService {
     totalAmount: number,
     items: { productId: number; quantity: number; price: number }[],
   ): Promise<Order> {
+    // Validate totalAmount is provided and is a valid number
+    if (totalAmount === null || totalAmount === undefined || isNaN(totalAmount)) {
+      throw new HttpException(
+        {
+          error: 'Invalid total amount',
+          message: 'Total amount must be a valid number',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     // Process checkout through external service
     await this.processCheckout(sessionId, totalAmount, items);
 
