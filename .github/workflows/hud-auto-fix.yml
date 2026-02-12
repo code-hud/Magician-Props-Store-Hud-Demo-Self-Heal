@@ -309,6 +309,7 @@ jobs:
           - Keep changes minimal and focused
           - Do not refactor unrelated code
           - Do not add unnecessary comments or documentation
+          - After making your changes, run `npm run lint` and fix any linting errors before finishing
           PROMPT_EOF
 
           echo "Prompt size: $(wc -c < /tmp/fix_prompt.txt) bytes"
