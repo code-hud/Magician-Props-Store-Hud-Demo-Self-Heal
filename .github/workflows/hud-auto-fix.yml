@@ -309,12 +309,13 @@ jobs:
           - Keep changes minimal and focused
           - Do not refactor unrelated code
           - Do not add unnecessary comments or documentation
-          - After making your changes, run `npm run lint` and fix any linting errors before finishing
+          - CRITICAL: You MUST run `npm run lint` after all code changes and fix every linting error. Do NOT finish until the linter passes with zero errors. This is a hard requirement.
           PROMPT_EOF
 
           echo "Prompt size: $(wc -c < /tmp/fix_prompt.txt) bytes"
 
-          # Run Claude with Hud MCP
+          # Run Claude with Hud MCP (stream-json captures full chain of thought)
+          STREAM_FILE="/tmp/claude_stream.jsonl"
           OUTPUT_FILE="/tmp/claude_output.txt"
           STDERR_FILE="/tmp/claude_stderr.txt"
 
@@ -322,11 +323,15 @@ jobs:
           cat /tmp/fix_prompt.txt | claude \
             -p \
             --model "sonnet" \
+            --output-format stream-json \
             --mcp-config ~/.claude/mcp_servers.json \
             --dangerously-skip-permissions \
-            > "$OUTPUT_FILE" 2>"$STDERR_FILE"
+            > "$STREAM_FILE" 2>"$STDERR_FILE"
           CLAUDE_EXIT=$?
           set -e
+
+          # Extract final answer from stream
+          jq -r 'select(.type == "result") | .result // empty' "$STREAM_FILE" > "$OUTPUT_FILE" 2>/dev/null || true
 
           echo "Claude exit code: $CLAUDE_EXIT"
 
@@ -531,6 +536,7 @@ jobs:
             /tmp/issue_context.txt
             /tmp/fix_prompt.txt
             /tmp/fix_summary.md
+            /tmp/claude_stream.jsonl
             /tmp/claude_output.txt
             /tmp/claude_stderr.txt
           retention-days: 7
