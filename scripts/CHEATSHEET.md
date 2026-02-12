@@ -10,7 +10,8 @@
   "<time_range>" \
   "<endpoint>" \
   "<issue_link>" \
-  "<endpoint_link>"
+  "<endpoint_link>" \
+  "<slowdown>"           # optional, e.g. "21ms → 3.5s"
 ```
 
 ---
@@ -64,5 +65,6 @@
   "7d" \
   "GET /cart/suggestions" \
   "https://www.app.hud.io/heads-up/issues/3966/?timeFrame=20260117_2200-20260120_1159&environment=production" \
-  "https://www.app.hud.io/explore/endpoints/21284775-21721485/?timeFrame=20260117_2200-20260120_1159&environment=production"
+  "https://www.app.hud.io/explore/endpoints/21284775-21721485/?timeFrame=20260117_2200-20260120_1159&environment=production" \
+  "21.37ms → 3.54s"
 ```
